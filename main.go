@@ -107,6 +107,8 @@ func main() {
 	server.Use(middleware.RequestId())
 	server.Use(middleware.Language())
 	middleware.SetUpLogger(server)
+	// gpt-4o/gpt-5 参数清洗
+	server.Use(middleware.ConstrainedModelSanitizer())
 	// Initialize session store
 	store := cookie.NewStore([]byte(config.SessionSecret))
 	server.Use(sessions.Sessions("session", store))

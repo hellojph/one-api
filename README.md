@@ -484,7 +484,7 @@ https://openai.justsong.cn
 # 在 one-api 源码根目录（已加入新中间件并修改 relay.go）
 docker buildx build \
   --platform linux/amd64 \
-  -t registry.easesaas.com/myron/one-api:0.6.11-p7 \
+  -t registry.easesaas.com/myron/one-api:0.6.11-p7.1 \
   -f Dockerfile \
   --push .
 

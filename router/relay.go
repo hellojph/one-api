@@ -18,13 +18,7 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 	relayV1Router := router.Group("/v1")
-	relayV1Router.Use(
-		middleware.RelayPanicRecover(),
-		middleware.TokenAuth(),
-		middleware.Distribute(),
-		// 新增：受限模型参数清洗（只对 /v1/chat|completions|responses 的 POST 生效）
-		middleware.ConstrainedModelSanitizer(),
-	)
+	relayV1Router.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.Distribute())
 	{
 		relayV1Router.Any("/oneapi/proxy/:channelid/*target", controller.Relay)
 		relayV1Router.POST("/completions", controller.Relay)
