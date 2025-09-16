@@ -4,15 +4,20 @@ WORKDIR /web
 COPY ./VERSION .
 COPY ./web .
 
-RUN npm install --prefix /web/default & \
-    npm install --prefix /web/berry & \
-    npm install --prefix /web/air & \
-    wait
+# 1) 允许旧式 peer 解析，避免 ERESOLVE
+ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
 
-RUN DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/default & \
-    DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/berry & \
-    DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/air & \
-    wait
+# 2) 在 default 主题内就地修正 ajv 依赖组合（不会改 package.json）
+RUN npm install --no-save --prefix /web/default ajv@^6 ajv-keywords@^3 schema-utils@^3
+
+# 3) 安装依赖 & 构建（同步执行，确保先成功再复制产物）
+RUN npm install --prefix /web/default && \
+    DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION="$(cat /web/VERSION)" npm run build --prefix /web/default && \
+    mkdir -p /web/build && \
+    cp -r /web/build/default/. /web/build/
+
+
+
 
 FROM golang:alpine AS builder2
 

@@ -478,3 +478,29 @@ https://openai.justsong.cn
 同样适用于基于本项目的二开项目。
 
 依据 MIT 协议，使用者需自行承担使用本项目的风险与责任，本开源项目开发者与此无关。
+
+
+
+# 在 one-api 源码根目录（已加入新中间件并修改 relay.go）
+docker buildx build \
+  --platform linux/amd64 \
+  -t registry.easesaas.com/myron/one-api:0.6.11-p7 \
+  -f Dockerfile \
+  --push .
+
+
+
+docker buildx build \
+  --platform linux/amd64 \
+  -t registry.easesaas.com/myron/one-api:0.6.11-p7 \
+  -f Dockerfile \
+  --push . \
+  --progress=plain  . 2>&1 | grep -A 50 'tree ./web/build'
+
+
+  docker buildx build \
+  --platform linux/amd64 \
+  -t one-api:local \
+  -f Dockerfile \
+  --load . \
+  --progress=plain
