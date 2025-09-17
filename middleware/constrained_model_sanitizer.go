@@ -84,12 +84,12 @@ func isConstrainedModel(model string) bool {
 
 	// 精确匹配（可按需扩展）
 	switch m {
-	case "gpt-5", "o1", "o1-mini", "o3":
+	case "gpt-4o", "gpt-5", "o1", "o1-mini", "o3":
 		return true
 	}
 
 	// 前缀匹配（覆盖家族/子版本）
-	for _, p := range []string{"gpt-5-", "o1-", "o3-"} {
+	for _, p := range []string{"gpt-4o-", "gpt-5-", "o1-", "o3-"} {
 		if strings.HasPrefix(m, p) {
 			return true
 		}
