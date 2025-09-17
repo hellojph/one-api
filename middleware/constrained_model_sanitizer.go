@@ -11,84 +11,66 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ConstrainedModelSanitizer 拦截 /v1/* 生成类请求；
-// 命中受限模型（gpt-4o / gpt-5 / o1 / o3 家族）时：
-//   - 移除 temperature/top_p
-//   - 把 max_tokens 重命名为端点要求的参数
+// 仅拦截 /v1/chat/completions：
+// 命中受限模型（gpt-5 / o1 / o3 家族及子版本）时：
+//  1. 移除 temperature / top_p
+//  2. 将 max_tokens -> max_completion_tokens
 func ConstrainedModelSanitizer() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.Method != http.MethodPost {
+		// 只处理 POST + /v1/chat/completions
+		if c.Request.Method != http.MethodPost || !strings.HasPrefix(c.Request.URL.Path, "/v1/chat/completions") {
 			c.Next()
 			return
 		}
 
-		path := c.Request.URL.Path
-		// 常见生成路由
-		if !(strings.HasPrefix(path, "/v1/chat/completions") ||
-			strings.HasPrefix(path, "/v1/completions") ||
-			strings.HasPrefix(path, "/v1/responses") ||
-			(strings.HasPrefix(path, "/v1/threads/") && strings.Contains(path, "/runs")) ||
-			(strings.HasPrefix(path, "/v1/assistants") && strings.Contains(path, "/runs"))) {
-			c.Next()
-			return
-		}
-
+		// 读取原始请求体
 		raw, err := io.ReadAll(c.Request.Body)
-		if err != nil || len(raw) == 0 {
-			c.Next()
-			return
-		}
+
+		// 定义并统一恢复请求体（无论是否改写/早退）
 		restore := func(b []byte) {
 			c.Request.Body = io.NopCloser(bytes.NewReader(b))
 			c.Request.ContentLength = int64(len(b))
 		}
 		defer restore(raw)
 
+		// 读取失败或空体则放行（保持原样）
+		if err != nil || len(raw) == 0 {
+			c.Next()
+			return
+		}
+
+		// 解析 JSON
 		var body map[string]any
 		if err := json.Unmarshal(raw, &body); err != nil {
 			c.Next()
 			return
 		}
 
+		// 非受限模型直接放行
 		model, _ := body["model"].(string)
 		if !isConstrainedModel(model) {
 			c.Next()
 			return
 		}
 
-		// 1. 删除不被支持的采样参数
+		// 1) 移除不支持的采样参数
 		delete(body, "temperature")
 		delete(body, "top_p")
 
-		// 2. 按端点改名 max_tokens
+		// 2) max_tokens -> max_completion_tokens（若用户传入了 max_tokens）
 		if mt, ok := body["max_tokens"]; ok && mt != nil {
-			switch {
-			case strings.HasPrefix(path, "/v1/responses"):
-				if _, ex := body["max_output_tokens"]; !ex {
-					body["max_output_tokens"] = mt
-				}
-				delete(body, "max_tokens")
-
-			case strings.HasPrefix(path, "/v1/threads/") ||
-				(strings.HasPrefix(path, "/v1/assistants") && strings.Contains(path, "/runs")):
-				if _, ex := body["max_completion_tokens"]; !ex {
-					body["max_completion_tokens"] = mt
-				}
-				delete(body, "max_tokens")
-
-			// 关键：gpt-4o / gpt-5 在 Chat Completions 也要 max_completion_tokens
-			case strings.HasPrefix(path, "/v1/chat/completions"),
-				strings.HasPrefix(path, "/v1/completions"):
-				if _, ex := body["max_completion_tokens"]; !ex {
-					body["max_completion_tokens"] = mt
-				}
-				delete(body, "max_tokens")
+			if _, exists := body["max_completion_tokens"]; !exists {
+				body["max_completion_tokens"] = mt
 			}
+			delete(body, "max_tokens")
 		}
 
+		// 写回改写后的请求体
 		if patched, err := json.Marshal(body); err == nil {
 			restore(patched)
 		}
+
+		// 交给后续处理
 		c.Next()
 	}
 }
@@ -99,24 +81,28 @@ func isConstrainedModel(model string) bool {
 	if m == "" {
 		return false
 	}
-	// 精确匹配
+
+	// 精确匹配（可按需扩展）
 	switch m {
-	case "gpt-4o", "gpt-4o-mini", "gpt-5", "o1", "o1-mini", "o3":
+	case "gpt-5", "o1", "o1-mini", "o3":
 		return true
 	}
-	// 前缀匹配
-	for _, p := range []string{"gpt-4o-", "gpt-5-", "o1-", "o3-"} {
+
+	// 前缀匹配（覆盖家族/子版本）
+	for _, p := range []string{"gpt-5-", "o1-", "o3-"} {
 		if strings.HasPrefix(m, p) {
 			return true
 		}
 	}
-	// 环境变量追加
+
+	// 环境变量追加（ONEAPI_CONSTRAINED_MODELS="foo,bar"）
 	if extra := strings.TrimSpace(os.Getenv("ONEAPI_CONSTRAINED_MODELS")); extra != "" {
 		for _, x := range strings.Split(extra, ",") {
-			if strings.EqualFold(strings.TrimSpace(x), model) {
+			if strings.ToLower(strings.TrimSpace(x)) == m {
 				return true
 			}
 		}
 	}
+
 	return false
 }
