@@ -89,6 +89,11 @@ const Header = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const systemName = getSystemName();
   const logo = getLogo();
+  // Prefer display_name in the header; fall back to username for backward compatibility
+  const userDisplayName =
+    (userState && userState.user && userState.user.display_name) ||
+    (userState && userState.user && userState.user.username) ||
+    '';
 
   async function logout() {
     setShowSidebar(false);
@@ -286,7 +291,8 @@ const Header = () => {
             />
             {userState.user ? (
               <Dropdown
-                text={userState.user.username}
+                // text={userState.user.username}
+                text={userDisplayName}
                 pointing
                 className='link item'
                 style={{
